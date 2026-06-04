@@ -446,8 +446,11 @@ setTimeout(function(){ document.documentElement.classList.add('shown'); }, 2400)
 
 <script>
 
-/* ════════ EMAIL CAPTURE ════════ */
+/* ════════ EMAIL CAPTURE — BREVO ════════ */
 (function(){
+  const BREVO_API_KEY = 'xkeysib-e539f9f33bcd00feb26caf4217eedbf36cc2297a136fe';
+  const LIST_ID = 2;
+
   const form = document.getElementById('form');
   const email = document.getElementById('email');
   const note = document.getElementById('note');
@@ -458,24 +461,63 @@ setTimeout(function(){ document.documentElement.classList.add('shown'); }, 2400)
     note.textContent = msg;
   }
 
-  form.addEventListener('submit', e=>{
+  function markDone(v){
+    form.classList.add('done');
+    form.querySelector('button span').textContent = 'Joined';
+    email.value = '';
+    email.placeholder = v;
+    setNote('Thank you. You are on the list — we will be in touch.', 'success');
+    try{ localStorage.setItem('ulfa_subscriber', v); }catch(_){}
+  }
+
+  form.addEventListener('submit', async e=>{
     e.preventDefault();
-    const v = email.value;
+    const v = email.value.trim();
     if(!valid(v)){
       setNote('Please enter a valid email address.', 'error');
       email.focus();
       return;
     }
-    try{ localStorage.setItem('ulfa_subscriber', v.trim()); }catch(_){}
-    form.classList.add('done');
+
+    // Optimistic UI
     const btn = form.querySelector('button span');
-    btn.textContent = 'Joined';
-    email.value = '';
-    email.placeholder = v.trim();
-    setNote('Thank you. You are on the list — we will be in touch.', 'success');
+    btn.textContent = '...';
+    setNote('', '');
+
+    try {
+      const res = await fetch('https://api.brevo.com/v3/contacts', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'api-key': BREVO_API_KEY
+        },
+        body: JSON.stringify({
+          email: v,
+          listIds: [LIST_ID],
+          updateEnabled: true
+        })
+      });
+
+      if(res.ok || res.status === 204 || res.status === 201){
+        markDone(v);
+      } else {
+        const data = await res.json().catch(()=>({}));
+        // Contact already exists — still mark as done
+        if(res.status === 400 && data.code === 'duplicate_parameter'){
+          markDone(v);
+        } else {
+          setNote('Something went wrong. Please try again.', 'error');
+          btn.textContent = 'Stay Close';
+        }
+      }
+    } catch(err) {
+      // Network error — still save locally
+      markDone(v);
+    }
   });
 
-  // restore prior subscription state
+  // Restore prior subscription state
   try{
     const prev = localStorage.getItem('ulfa_subscriber');
     if(prev){

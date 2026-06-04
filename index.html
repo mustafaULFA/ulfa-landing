@@ -446,11 +446,8 @@ setTimeout(function(){ document.documentElement.classList.add('shown'); }, 2400)
 
 <script>
 
-/* ════════ EMAIL CAPTURE — BREVO ════════ */
+/* ════════ EMAIL CAPTURE — SECURE VERCEL API ════════ */
 (function(){
-  const BREVO_API_KEY = 'xkeysib-e539f9f33bcd00feb26caf4217eedbf36cc2297a136fe';
-  const LIST_ID = 2;
-
   const form = document.getElementById('form');
   const email = document.getElementById('email');
   const note = document.getElementById('note');
@@ -473,51 +470,38 @@ setTimeout(function(){ document.documentElement.classList.add('shown'); }, 2400)
   form.addEventListener('submit', async e=>{
     e.preventDefault();
     const v = email.value.trim();
+
     if(!valid(v)){
       setNote('Please enter a valid email address.', 'error');
       email.focus();
       return;
     }
 
-    // Optimistic UI
     const btn = form.querySelector('button span');
     btn.textContent = '...';
     setNote('', '');
 
     try {
-      const res = await fetch('https://api.brevo.com/v3/contacts', {
+      const res = await fetch('/api/subscribe', {
         method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'api-key': BREVO_API_KEY
-        },
-        body: JSON.stringify({
-          email: v,
-          listIds: [LIST_ID],
-          updateEnabled: true
-        })
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: v })
       });
 
-      if(res.ok || res.status === 204 || res.status === 201){
+      const data = await res.json().catch(()=>({}));
+
+      if(res.ok){
         markDone(v);
       } else {
-        const data = await res.json().catch(()=>({}));
-        // Contact already exists — still mark as done
-        if(res.status === 400 && data.code === 'duplicate_parameter'){
-          markDone(v);
-        } else {
-          setNote('Something went wrong. Please try again.', 'error');
-          btn.textContent = 'Stay Close';
-        }
+        setNote(data.message || 'Something went wrong. Please try again.', 'error');
+        btn.textContent = 'Stay Close';
       }
     } catch(err) {
-      // Network error — still save locally
-      markDone(v);
+      setNote('Something went wrong. Please try again.', 'error');
+      btn.textContent = 'Stay Close';
     }
   });
 
-  // Restore prior subscription state
   try{
     const prev = localStorage.getItem('ulfa_subscriber');
     if(prev){
